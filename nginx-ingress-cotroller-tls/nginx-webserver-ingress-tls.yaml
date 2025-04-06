@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-webserver-tls
+  namespace: nginx-web
+  annotations:
+    cert-manager.io/cluster-issuer: "internal-cluster-issuer"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - nginxweb.k3s.local
+      secretName: nginx-web-local-tls
+  rules:
+    - host: nginxweb.k3s.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-webserver
+                port:
+                  number: 80

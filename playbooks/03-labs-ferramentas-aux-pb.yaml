@@ -1,0 +1,102 @@
+- name: Instalar ferramentas auxiliares para ambiente Kubernetes
+  hosts: labs
+  become: true
+  vars:
+    krew_arch: "linux_arm64"
+    krew_root: "/home/{{ ansible_user }}/.krew"
+
+    yq_version_target: "v4.40.5"
+    yq_bin_path: /usr/local/bin/yq
+
+  tasks:
+
+  - name: Garantir dependências básicas
+    apt:
+      name:
+        - curl
+        - unzip
+        - git
+        - bash-completion
+        - fzf
+        - jq
+      state: present
+      update_cache: true
+
+  # 1 - kubectl
+  - name: Instalar kubectl
+    shell: |
+      curl -Lo /usr/local/bin/kubectl https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl
+      chmod +x /usr/local/bin/kubectl
+    args:
+      creates: /usr/local/bin/kubectl
+
+  # 2 - krew
+  - name: Instalar krew
+    shell: |
+      set -e
+      curl -fsSL -o krew.tar.gz "https://github.com/kubernetes-sigs/krew/releases/latest/download/krew-{{ krew_arch }}.tar.gz"
+      tar zxvf krew.tar.gz
+      ./krew-{{ krew_arch }} install krew
+    args:
+      chdir: /tmp
+      creates: "{{ krew_root }}"
+
+  - name: Adicionar krew ao PATH do bashrc
+    lineinfile:
+      path: "/home/{{ ansible_user }}/.bashrc"
+      line: 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"'
+      insertafter: EOF
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+
+  # 3 - kubectx
+  - name: Instalar kubectx
+    shell: |
+      git clone https://github.com/ahmetb/kubectx /opt/kubectx
+      ln -sf /opt/kubectx/kubectx /usr/local/bin/kubectx
+    args:
+      creates: /opt/kubectx
+
+  # 4 - kubens
+  - name: Instalar kubens
+    shell: |
+      ln -sf /opt/kubectx/kubens /usr/local/bin/kubens
+    args:
+      creates: /usr/local/bin/kubens
+
+  # 5 - kubectl-neat
+  - name: Instalar kubectl-neat
+    shell: |
+      curl -sSL -o /usr/local/bin/kubectl-neat https://github.com/itaysk/kubectl-neat/releases/latest/download/kubectl-neat-linux-arm64
+      chmod +x /usr/local/bin/kubectl-neat
+    args:
+      creates: /usr/local/bin/kubectl-neat
+
+  # 6 - stern
+  - name: Instalar stern (ARM64 binário direto)
+    shell: |
+      curl -sSL -o /usr/local/bin/stern https://github.com/stern/stern/releases/latest/download/stern_linux_arm64
+      chmod +x /usr/local/bin/stern
+    args:
+      creates: /usr/local/bin/stern
+
+  # 7 - kube-ps1
+  - name: Clonar kube-ps1
+    git:
+      repo: https://github.com/jonmosco/kube-ps1.git
+      dest: /opt/kube-ps1
+      version: master
+
+  - name: Ativar kube-ps1 no bashrc
+    lineinfile:
+      path: "/home/{{ ansible_user }}/.bashrc"
+      line: 'source /opt/kube-ps1/kube-ps1.sh && export PS1="$(kube_ps1) $PS1"'
+      insertafter: EOF
+      owner: "{{ ansible_user }}"
+      group: "{{ ansible_user }}"
+
+  # 8 - helm
+  - name: Instalar Helm
+    shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    args:
+      creates: /usr/local/bin/helm

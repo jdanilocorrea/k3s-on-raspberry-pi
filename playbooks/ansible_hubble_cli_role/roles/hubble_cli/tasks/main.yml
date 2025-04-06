@@ -1,0 +1,47 @@
+- name: Detectar arquitetura do host
+  set_fact:
+    hubble_cli_url: >-
+      {% if ansible_architecture == 'x86_64' %}
+        https://github.com/cilium/hubble/releases/latest/download/hubble-linux-amd64.tar.gz
+      {% elif ansible_architecture in ['aarch64', 'arm64'] %}
+        https://github.com/cilium/hubble/releases/latest/download/hubble-linux-arm64.tar.gz
+      {% else %}
+        unsupported
+      {% endif %}
+
+- name: Falhar se arquitetura não suportada
+  fail:
+    msg: "❌ Arquitetura {{ ansible_architecture }} não suportada para Hubble CLI."
+  when: hubble_cli_url == "unsupported"
+
+- name: Baixar Hubble CLI tar.gz
+  get_url:
+    url: "{{ hubble_cli_url }}"
+    dest: /tmp/hubble.tar.gz
+    mode: '0644'
+
+- name: Extrair hubble CLI
+  unarchive:
+    src: /tmp/hubble.tar.gz
+    dest: /tmp/
+    remote_src: yes
+
+- name: Tornar o binário hubble executável
+  file:
+    path: /tmp/hubble
+    mode: '0755'
+
+- name: Mover hubble para /usr/local/bin
+  become: true
+  command: mv /tmp/hubble /usr/local/bin/hubble
+  args:
+    creates: /usr/local/bin/hubble
+
+- name: Verificar se hubble foi instalado corretamente
+  command: hubble version
+  register: hubble_version
+  ignore_errors: true
+
+- name: Mostrar versão instalada da Hubble CLI
+  debug:
+    var: hubble_version.stdout

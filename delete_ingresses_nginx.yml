@@ -1,0 +1,37 @@
+---
+- name: Deletar os Ingresses aplicados anteriormente via kubectl -f
+  hosts: labs
+  become: true
+  vars:
+    yaml_dir: "/home/{{ ansible_user }}/nginx-ingress-cotroller"
+
+  tasks:
+    - name: Verificar se o diretório com YAMLs existe no host remoto
+      stat:
+        path: "{{ yaml_dir }}"
+      register: dir_status
+
+    - name: Falhar se o diretório não existir
+      fail:
+        msg: "❌ Diretório '{{ yaml_dir }}' não encontrado no host remoto."
+      when: not dir_status.stat.exists
+
+    - name: Verificar se há arquivos YAML para deletar
+      find:
+        paths: "{{ yaml_dir }}"
+        patterns: "*.yaml"
+      register: yaml_files
+
+    - name: Falhar se não houver arquivos YAML
+      fail:
+        msg: "❌ Nenhum arquivo YAML encontrado em '{{ yaml_dir }}'."
+      when: yaml_files.matched == 0
+
+    - name: Deletar recursos aplicados anteriormente com kubectl delete -f
+      shell: "kubectl delete -f {{ yaml_dir }}"
+      args:
+        chdir: "{{ yaml_dir }}"
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      become: false
+      become_user: "{{ ansible_user }}"

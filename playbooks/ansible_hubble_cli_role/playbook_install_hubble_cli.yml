@@ -1,0 +1,5 @@
+- name: Instalar Hubble CLI no host labs
+  hosts: labs
+  become: true
+  roles:
+    - hubble_cli

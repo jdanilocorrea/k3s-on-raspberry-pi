@@ -1,0 +1,112 @@
+---
+- name: Criação do usuário no Raspberry Pi
+  hosts: raspberrys-setup
+  become: true
+  vars_files:
+    - raspberry-vars.yaml
+
+  tasks:
+    - name: Instalação do pacote whois
+      ansible.builtin.apt:
+        name: whois
+        state: present
+        update_cache: true
+      register: result_whois
+
+    - name: Verificando se o pacote whois foi instalado
+      ansible.builtin.debug:
+        msg: "{{ result_whois }}"
+
+    - name: Criando senha criptografada
+      ansible.builtin.command: "mkpasswd --method=SHA-512 {{ raspberry_password }}"
+      register: result_crypt_pwd
+
+    - name: Verificando se a senha foi criptografada
+      ansible.builtin.debug:
+        msg: "{{ result_crypt_pwd }}"
+
+    - name: Definindo a senha criptografada
+      ansible.builtin.set_fact:
+        raspberry_crypt_pwd: "{{ result_crypt_pwd.stdout }}"
+        
+    - name: Criando usuário {{ raspberry_username }} no Raspberry Pi OS
+      ansible.builtin.user:
+        name: "{{ raspberry_username }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+        password: "{{ raspberry_crypt_pwd }}"
+      register: result_user
+
+    - name: Verificando se o usuário foi criado
+      ansible.builtin.debug:
+        msg: "{{ result_user }}"
+
+    - name: Criando diretório .ssh
+      ansible.builtin.file:
+        path: "/home/{{ raspberry_username }}/.ssh"
+        owner: "{{ raspberry_username }}"
+        group: "{{ raspberry_username }}"
+        state: directory
+        mode: '0700'
+      register: result_ssh_dir
+
+    - name: Verificando se o diretório .ssh foi criado
+      ansible.builtin.debug:
+        msg: "{{ result_ssh_dir }}"
+
+    - name: Adicionando chave pública ao authorized_keys
+      ansible.builtin.copy:
+        src: "/home/${USER}/.ssh/id_rsa.pub"
+        dest: "/home/{{ raspberry_username }}/.ssh/authorized_keys"
+        owner: "{{ raspberry_username }}"
+        group: "{{ raspberry_username }}"
+        mode: '0600'
+      register: result_authorized_keys
+
+    - name: Verificando se a chave pública foi adicionada
+      ansible.builtin.debug:
+        msg: "{{ result_authorized_keys }}"
+
+    # - name: Habilitar cgroups no Raspberry Pi OS (cmdline.txt)
+    #   ansible.builtin.lineinfile:
+    #     path: /boot/cmdline.txt
+    #     backrefs: yes
+    #     state: present
+    #     regexp: '^(?!.*cgroup_memory=1 cgroup_enable=memory).*$'
+    #     line: '\1 cgroup_memory=1 cgroup_enable=memory'
+    #   register: result_cmdline
+    #   notify: Reboot
+
+    # - name: Verificando se cgroups foi habilitado
+    #   ansible.builtin.debug:
+    #     msg: "{{ result_cmdline }}"
+
+    # - name: Habilitar cgroups no Raspberry Pi OS (cmdline.txt em firmware)
+    #   ansible.builtin.lineinfile:
+    #     path: /boot/firmware/cmdline.txt
+    #     backrefs: yes
+    #     state: present
+    #     regexp: '^(?!.*cgroup_memory=1 cgroup_enable=memory).*$'
+    #     line: '\1 cgroup_memory=1 cgroup_enable=memory'
+    #   register: result_cmdline_firmware
+    #   notify: Reboot
+
+    # - name: Verificando se cgroups foi habilitado no firmware
+    #   ansible.builtin.debug:
+    #     msg: "{{ result_cmdline_firmware }}"
+
+    - name: Desativar swap permanentemente
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        state: absent
+        regexp: '.*\sswap\s.*'
+
+    # - name: Desativar swap temporariamente
+    #   ansible.builtin.command: swapoff -a
+    #   when: ansible_swaptotal_mb > 0
+
+  handlers:
+    - name: Reboot
+      ansible.builtin.reboot:
+        reboot_timeout: 60

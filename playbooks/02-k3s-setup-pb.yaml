@@ -1,0 +1,70 @@
+---
+- name: Instalar K3s em Cluster Raspberry Pi 4
+  hosts: k3s
+  become: true
+  vars_files:
+    - k3s-vars.yaml
+  tasks:
+
+  - name: Atualizar pacotes do sistema
+    apt:
+      update_cache: yes
+      upgrade: full
+
+  - name: Instalar dependências necessárias
+    apt:
+      name:
+        - curl
+        - sudo
+        - iptables
+        - socat
+        - conntrack
+        - ebtables
+      state: present
+
+- name: Instalar K3s no Control Plane
+  hosts: control_plane
+  become: true
+  vars_files:
+    - k3s-vars.yaml
+  tasks:
+
+  - name: Baixar e instalar K3s (Control Plane)
+    shell: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} INSTALL_K3S_EXEC='--flannel-backend=none --disable-network-policy' sh -s - server --disable traefik"
+    # shell: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - server --disable traefik"
+    args:
+      creates: /etc/systemd/system/k3s.service
+
+  - name: Garantir que o K3s está rodando
+    systemd:
+      name: k3s
+      state: started
+      enabled: yes
+
+  - name: Obter o token do K3s Server
+    # shell: "awk -F ':' '{print $1}' {{ k3s_token_file }}"
+    shell: "cat {{ k3s_token_file }}"
+    register: k3s_token
+    changed_when: false
+
+  - name: Definir variável global com o token
+    set_fact:
+      k3s_cluster_token: "{{ k3s_token.stdout }}"
+
+- name: Instalar K3s nos Workers
+  hosts: workers
+  become: true
+  vars_files:
+    - k3s-vars.yaml
+  tasks:
+
+  - name: Baixar e instalar K3s (Workers)
+    shell: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} K3S_URL={{ k3s_server_url }} K3S_TOKEN={{ hostvars['10.0.10.10']['k3s_cluster_token'] }} sh -s - agent"
+    args:
+      creates: /etc/systemd/system/k3s-agent.service
+
+  - name: Garantir que o K3s Agent está rodando
+    systemd:
+      name: k3s-agent
+      state: started
+      enabled: yes

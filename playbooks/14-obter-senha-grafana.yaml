@@ -1,0 +1,19 @@
+---
+- name: Obter senha do Grafana no host remoto e copiar para local
+  hosts: labs
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Executar comando para obter senha do Grafana
+      ansible.builtin.shell: |
+        SENHA=$(kubectl get secret --namespace monitoring monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d)
+        echo -e "Usuário padrão: admin\nSenha: $SENHA" > /tmp/senha_admin_grafana.txt
+      args:
+        executable: /bin/bash
+
+    - name: Copiar arquivo de senha para máquina local
+      ansible.builtin.fetch:
+        src: /tmp/senha_admin_grafana.txt
+        dest: ../senha_admin_grafana.txt
+        flat: true

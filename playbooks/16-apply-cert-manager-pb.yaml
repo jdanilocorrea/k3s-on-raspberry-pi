@@ -1,0 +1,51 @@
+---
+- name: Copiar e aplicar manifests do Cert-Manager no host labs
+  hosts: labs
+  become: true
+  vars:
+    source_dir: "{{ playbook_dir }}/../cert-manager"
+    dest_dir: "/home/{{ ansible_user }}/cert-manager"
+
+  tasks:
+    - name: Verificar se o diretório de origem existe localmente
+      delegate_to: localhost
+      become: false
+      stat:
+        path: "{{ source_dir }}"
+      register: local_dir_status
+
+    - name: Falhar se o diretório de origem não existir
+      delegate_to: localhost
+      become: false
+      fail:
+        msg: "❌ Diretório '{{ source_dir }}' não encontrado localmente. Verifique o caminho."
+      when: not local_dir_status.stat.exists
+
+    - name: Copiar a pasta cert-manager para o host remoto
+      copy:
+        src: "{{ source_dir }}"
+        dest: "/home/{{ ansible_user }}/"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      become: false
+
+    - name: Garantir que os arquivos YAML estão no diretório destino remoto
+      find:
+        paths: "{{ dest_dir }}"
+        patterns: "*.yaml"
+      register: yaml_files
+
+    - name: Falhar se não houver arquivos YAML para aplicar
+      fail:
+        msg: "❌ Nenhum arquivo YAML encontrado em '{{ dest_dir }}'."
+      when: yaml_files.matched == 0
+
+    - name: Aplicar todos os YAMLs da pasta cert-manager com kubectl apply -f
+      shell: "kubectl apply -f {{ dest_dir }}"
+      args:
+        chdir: "{{ dest_dir }}"
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      become: false
+      become_user: "{{ ansible_user }}"

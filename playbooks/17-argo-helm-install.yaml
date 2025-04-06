@@ -1,0 +1,88 @@
+---
+- name: Copiar, tornar executável e executar script argo_helm_install.sh no host labs
+  hosts: labs
+  become: true
+  vars:
+    local_script_path: "../helm_installs/argo_helm_install.sh"
+    remote_script_path: "/home/{{ ansible_user }}/argo_helm_install.sh"
+    kubeconfig_path: "/home/{{ ansible_user }}/.kube/config"
+
+  tasks:
+    - name: Verificar se o arquivo KUBECONFIG existe
+      stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_status
+
+    - name: Falhar se KUBECONFIG não existir
+      fail:
+        msg: "Arquivo KUBECONFIG '{{ kubeconfig_path }}' não encontrado."
+      when: not kubeconfig_status.stat.exists
+
+    - name: Verificar se helm está disponível
+      shell: "command -v helm"
+      register: helm_check
+      failed_when: helm_check.rc != 0
+      become: false
+      become_user: "{{ ansible_user }}"
+
+    - name: Verificar se kubectl está disponível
+      shell: "command -v kubectl"
+      register: kubectl_check
+      failed_when: kubectl_check.rc != 0
+      become: false
+      become_user: "{{ ansible_user }}"
+
+    - name: Copiar o script argo_helm_install.sh para o host remoto
+      copy:
+        src: "{{ local_script_path }}"
+        dest: "{{ remote_script_path }}"
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Verificar se o script foi copiado com sucesso
+      stat:
+        path: "{{ remote_script_path }}"
+      register: script_status
+
+    - name: Falhar se o script não foi copiado corretamente
+      fail:
+        msg: "Script '{{ remote_script_path }}' não encontrado após cópia."
+      when: not script_status.stat.exists
+
+    - name: Executar o script argo_helm_install.sh no host remoto com ambiente KUBECONFIG
+      shell: "/bin/bash {{ remote_script_path }}"
+      args:
+        chdir: "/home/{{ ansible_user }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: argo_script_output
+      retries: 2
+      delay: 20
+      until: argo_script_output.rc == 0
+
+    - name: Exibir saída do script argo_helm_install.sh
+      debug:
+        var: argo_script_output.stdout_lines
+
+    - name: Exibir erros do script, se houver
+      debug:
+        var: argo_script_output.stderr_lines
+      when: argo_script_output is failed
+
+    - name: Aguardar o pod do Argo CD Server ficar pronto
+      shell: |
+        kubectl wait --namespace argocd \
+          --for=condition=ready pod \
+          --selector=app.kubernetes.io/component=server \
+          --timeout=600s
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+      register: argocd_ready
+      retries: 3
+      delay: 15
+      until: argocd_ready.rc == 0

@@ -1,0 +1,68 @@
+---
+- name: Instalar yq (mikefarah/yq) no diretório ~/.local/bin do usuário normal (Raspberry Pi OS Lite ARM64)
+  hosts: labs
+  gather_facts: true
+
+  vars:
+    yq_version_target: "v4.40.5"
+    yq_bin_url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version_target }}/yq_linux_arm64"
+    user_local_bin: "/home/{{ ansible_user }}/.local/bin"
+    yq_user_bin: "{{ user_local_bin }}/yq"
+    bashrc_path: "/home/{{ ansible_user }}/.bashrc"
+    path_line: 'export PATH="$HOME/.local/bin:$PATH"'
+
+  tasks:
+    - name: Garantir que o sistema seja ARM64 (aarch64)
+      fail:
+        msg: "❌ Este playbook é específico para Raspberry Pi OS Lite ARM64 (aarch64)"
+      when: ansible_architecture != "aarch64"
+
+    - name: Criar diretório ~/.local/bin para o usuário
+      become: true
+      file:
+        path: "{{ user_local_bin }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Baixar yq ARM64 para ~/.local/bin
+      become: true
+      get_url:
+        url: "{{ yq_bin_url }}"
+        dest: "{{ yq_user_bin }}"
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Garantir PATH correto no ~/.bashrc
+      become: true
+      lineinfile:
+        path: "{{ bashrc_path }}"
+        line: "{{ path_line }}"
+        state: present
+        insertafter: EOF
+        create: yes
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
+    - name: Criar link simbólico global para yq (opcional)
+      become: true
+      file:
+        src: "{{ yq_user_bin }}"
+        dest: "/usr/bin/yq"
+        state: link
+        force: true
+
+    - name: Verificar versão instalada do yq com o usuário atual (sem sudo)
+      become: false
+      environment:
+        PATH: "{{ user_local_bin }}:{{ ansible_env.PATH }}"
+      command: "yq --version"
+      register: yq_version_output
+      changed_when: false
+
+    - name: Exibir versão final do yq instalada
+      debug:
+        msg: "✅ yq instalado com sucesso: {{ yq_version_output.stdout }}"

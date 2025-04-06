@@ -1,0 +1,10 @@
+---
+- name: Copiar arquivo metallb-config.yaml para o host labs
+  hosts: labs
+  become: false
+  tasks:
+    - name: Copiar arquivo metallb-config.yaml para o diretório home do usuário remoto
+      copy:
+        src: "../metallb/metallb-config.yaml"
+        dest: "{{ ansible_env.HOME }}/metallb-config.yaml"
+        mode: '0644'

@@ -1,0 +1,57 @@
+- name: Copiar, tornar executável e executar script cert_manager_helm_install.sh no host labs
+  hosts: labs
+  become: true
+  vars:
+    local_script_path: "../helm_installs/cert_manager_helm_install.sh"
+    remote_script_path: "/home/{{ ansible_user }}/cert_manager_helm_install.sh"
+    kubeconfig_path: "/home/{{ ansible_user }}/.kube/config"
+
+  tasks:
+
+    - name: Verificar se o arquivo KUBECONFIG existe
+      stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_status
+
+    - name: Falhar se KUBECONFIG não existir
+      fail:
+        msg: "Arquivo KUBECONFIG '{{ kubeconfig_path }}' não encontrado. Configure corretamente antes de executar este playbook."
+      when: not kubeconfig_status.stat.exists
+
+    - name: Copiar o script cert_manager_helm_install.sh para o host remoto
+      copy:
+        src: "{{ local_script_path }}"
+        dest: "{{ remote_script_path }}"
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Verificar se o script foi copiado com sucesso
+      stat:
+        path: "{{ remote_script_path }}"
+      register: script_status
+
+    - name: Falhar se o script não foi copiado corretamente
+      fail:
+        msg: "Script '{{ remote_script_path }}' não encontrado após cópia."
+      when: not script_status.stat.exists
+
+    - name: Executar o script cert_manager_helm_install.sh no host remoto com ambiente KUBECONFIG como usuário normal
+      shell: "/bin/bash {{ remote_script_path }}"
+      args:
+        chdir: "/home/{{ ansible_user }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: cert_manager_script_output
+      failed_when: cert_manager_script_output.rc != 0
+
+    - name: Exibir saída do script cert_manager_helm_install.sh
+      debug:
+        var: cert_manager_script_output.stdout_lines
+
+    - name: Exibir erro do script se houver
+      debug:
+        var: cert_manager_script_output.stderr_lines
+      when: cert_manager_script_output.rc != 0

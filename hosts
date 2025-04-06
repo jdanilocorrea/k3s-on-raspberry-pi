@@ -1,0 +1,25 @@
+[raspberrys-setup]
+10.0.10.10
+10.0.10.20
+10.0.10.30
+10.0.10.40
+
+[k3s]
+10.0.10.10
+10.0.10.20
+10.0.10.30
+
+[control_plane]
+10.0.10.10
+
+[workers]
+10.0.10.20
+10.0.10.30
+
+[labs]
+10.0.10.40
+
+[raspberrys-setup:vars]
+ansible_ssh_privare_key_file = ~/.ssh/id_rsa
+ansible_user  = beyonder 
+

@@ -1,0 +1,13 @@
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-all
+  namespace: default  # Altere para o namespace desejado
+spec:
+  endpointSelector: {}  # Aplica para todos os pods no namespace
+  ingress:
+  - fromEntities:
+    - all
+  egress:
+  - toEntities:
+    - all

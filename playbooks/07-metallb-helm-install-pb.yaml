@@ -1,0 +1,115 @@
+- name: Copiar, tornar executável e executar script metallb_helm_install.sh no host labs
+  hosts: labs
+  become: true
+  vars:
+    local_script_path: "../helm_installs/metallb_helm_install.sh"
+    remote_script_path: "/home/{{ ansible_user }}/metallb_helm_install.sh"
+    kubeconfig_path: "/home/{{ ansible_user }}/.kube/config"
+    metallb_config_path: "/home/{{ ansible_user }}/metallb-config.yaml"
+
+  tasks:
+
+    - name: Verificar se o arquivo KUBECONFIG existe
+      stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_status
+
+    - name: Falhar se KUBECONFIG não existir
+      fail:
+        msg: "Arquivo KUBECONFIG '{{ kubeconfig_path }}' não encontrado. Configure corretamente antes de executar este playbook."
+      when: not kubeconfig_status.stat.exists
+
+    - name: Copiar o script metallb_helm_install.sh para o host remoto
+      copy:
+        src: "{{ local_script_path }}"
+        dest: "{{ remote_script_path }}"
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Verificar se o script foi copiado com sucesso
+      stat:
+        path: "{{ remote_script_path }}"
+      register: script_status
+
+    - name: Falhar se o script não foi copiado corretamente
+      fail:
+        msg: "Script '{{ remote_script_path }}' não encontrado após cópia."
+      when: not script_status.stat.exists
+
+    - name: Executar o script metallb_helm_install.sh no host remoto com ambiente KUBECONFIG como usuário normal
+      shell: "/bin/bash {{ remote_script_path }}"
+      args:
+        chdir: "/home/{{ ansible_user }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: metallb_script_output
+      failed_when: metallb_script_output.rc != 0
+
+    - name: Exibir saída do script metallb_helm_install.sh
+      debug:
+        var: metallb_script_output.stdout_lines
+
+    - name: Exibir erro do script se houver
+      debug:
+        var: metallb_script_output.stderr_lines
+      when: metallb_script_output.rc != 0
+
+    # ✅ CORRIGIDO: Esperar os pods do MetalLB Controller estarem prontos com retry
+    - name: Aguardar pods do MetalLB Controller ficarem prontos
+      shell: |
+        kubectl wait --namespace metallb-system \
+          --for=condition=ready pod \
+          --selector=app.kubernetes.io/component=controller \
+          --timeout=300s
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+      register: controller_ready
+      retries: 3
+      delay: 20
+      until: controller_ready.rc == 0
+
+    - name: Aguardar endpoints do webhook do MetalLB estarem disponíveis
+      shell: |
+        kubectl get endpoints metallb-webhook-service -n metallb-system -o jsonpath='{.subsets}' | grep -q 'addresses'
+      register: webhook_check
+      retries: 10
+      delay: 10
+      until: webhook_check.rc == 0
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+
+    # ✅ BLOCO FINAL: Aplicar o metallb-config.yaml
+    - name: Verificar se arquivo metallb-config.yaml está presente no host remoto
+      stat:
+        path: "{{ metallb_config_path }}"
+      register: config_status
+
+    - name: Falhar se arquivo metallb-config.yaml não estiver disponível
+      fail:
+        msg: "Arquivo '{{ metallb_config_path }}' não encontrado. Certifique-se de que o arquivo esteja no caminho correto no host remoto."
+      when: not config_status.stat.exists
+
+    - name: Aplicar metallb-config.yaml com kubectl
+      shell: "kubectl apply -f {{ metallb_config_path }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+      register: config_apply_output
+      failed_when: config_apply_output.rc != 0
+
+    - name: Exibir saída da aplicação do config
+      debug:
+        var: config_apply_output.stdout_lines
+
+    - name: Exibir erros da aplicação do config, se houver
+      debug:
+        var: config_apply_output.stderr_lines
+      when: config_apply_output.rc != 0
