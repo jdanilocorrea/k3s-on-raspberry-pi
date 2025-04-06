@@ -1,10 +1,11 @@
-- name: Copiar, tornar executável e executar script loki_helm_install.sh no host labs
+- name: Copiar e executar script loki_helm_install.sh no host labs
   hosts: labs
   become: true
   vars:
     local_script_path: "../helm_installs/loki_helm_install.sh"
     remote_script_path: "/home/{{ ansible_user }}/loki_helm_install.sh"
     kubeconfig_path: "/home/{{ ansible_user }}/.kube/config"
+    monitoring_namespace: "monitoring"
 
   tasks:
 
@@ -15,7 +16,7 @@
 
     - name: Falhar se KUBECONFIG não existir
       fail:
-        msg: "Arquivo KUBECONFIG '{{ kubeconfig_path }}' não encontrado. Configure corretamente antes de executar este playbook."
+        msg: "Arquivo KUBECONFIG '{{ kubeconfig_path }}' não encontrado."
       when: not kubeconfig_status.stat.exists
 
     - name: Copiar o script loki_helm_install.sh para o host remoto
@@ -36,7 +37,7 @@
         msg: "Script '{{ remote_script_path }}' não encontrado após cópia."
       when: not script_status.stat.exists
 
-    - name: Executar o script loki_helm_install.sh no host remoto com ambiente KUBECONFIG como usuário normal
+    - name: Executar o script loki_helm_install.sh com ambiente KUBECONFIG
       shell: "/bin/bash {{ remote_script_path }}"
       args:
         chdir: "/home/{{ ansible_user }}"
@@ -54,23 +55,7 @@
       debug:
         var: loki_script_output.stdout_lines
 
-    - name: Exibir erro do script se houver
+    - name: Exibir erros do script se houver
       debug:
         var: loki_script_output.stderr_lines
       when: loki_script_output.rc != 0
-
-    - name: Aguardar pods do Loki ficarem prontos
-      shell: |
-        kubectl wait --namespace monitoring \
-          --for=condition=ready pod \
-          --selector=app=loki \
-          --timeout=300s
-      environment:
-        KUBECONFIG: "{{ kubeconfig_path }}"
-      become: false
-      become_user: "{{ ansible_user }}"
-      register: loki_ready
-      retries: 3
-      delay: 20
-      until: loki_ready.rc == 0
-

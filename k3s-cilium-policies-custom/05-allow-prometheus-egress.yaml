@@ -2,7 +2,7 @@
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: allow-prometheus-scraping
+  name: allow-prometheus-egress
   namespace: monitoring
 spec:
   endpointSelector:

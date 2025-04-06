@@ -1,0 +1,63 @@
+---
+- name: Copiar e aplicar políticas do Cilium no host labs
+  hosts: labs
+  become: false
+  vars:
+    source_dir: "{{ playbook_dir }}/../k3s-cilium-policies-custom"
+    dest_dir: "/home/{{ ansible_user }}/k3s-cilium-policies-custom"
+    kubeconfig_path: "/home/{{ ansible_user }}/.kube/config"
+
+  tasks:
+
+    - name: Verificar se o diretório de origem existe localmente
+      delegate_to: localhost
+      stat:
+        path: "{{ source_dir }}"
+      register: local_dir_status
+
+    - name: Falhar se o diretório de origem não existir
+      delegate_to: localhost
+      fail:
+        msg: "❌ Diretório '{{ source_dir }}' não encontrado localmente."
+      when: not local_dir_status.stat.exists
+
+    - name: Remover diretório de destino se já existir (corrigir permissões)
+      file:
+        path: "{{ dest_dir }}"
+        state: absent
+      become: true
+
+    - name: Copiar a pasta k3s-cilium-policies-custom para o host remoto
+      copy:
+        src: "{{ source_dir }}"
+        dest: "/home/{{ ansible_user }}/"
+      become: false
+
+    - name: Criar namespaces necessários para as políticas
+      shell: |
+        kubectl create namespace app --dry-run=client -o yaml | kubectl apply -f -
+        kubectl create namespace database --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      become: false
+      become_user: "{{ ansible_user }}"
+
+    - name: Verificar se há arquivos YAML no destino
+      find:
+        paths: "{{ dest_dir }}"
+        patterns: "*.yaml"
+      register: yaml_files
+
+    - name: Falhar se nenhum arquivo YAML foi encontrado
+      fail:
+        msg: "❌ Nenhum arquivo YAML encontrado em '{{ dest_dir }}'."
+      when: yaml_files.matched == 0
+
+    - name: Aplicar todos os YAMLs da pasta com kubectl
+      shell: "kubectl apply -f {{ dest_dir }}"
+      args:
+        chdir: "{{ dest_dir }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      become: false
+      become_user: "{{ ansible_user }}"

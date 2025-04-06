@@ -21,5 +21,4 @@
 
 [raspberrys-setup:vars]
 ansible_ssh_privare_key_file = ~/.ssh/id_rsa
-ansible_user  = beyonder 
-
+ansible_user  = beyonder

@@ -1,0 +1,19 @@
+---
+- name: Obter senha do ArgoCD no host remoto e copiar para local
+  hosts: labs
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Executar comando para obter senha do ArgoCD
+      ansible.builtin.shell: |
+        SENHA=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+        echo -e "Usuário padrão: admin\nSenha: $SENHA" > /tmp/senha_admin_argocd.txt
+      args:
+        executable: /bin/bash
+
+    - name: Copiar arquivo de senha para máquina local
+      ansible.builtin.fetch:
+        src: /tmp/senha_admin_argocd.txt
+        dest: ../senha_admin_argocd.txt
+        flat: true

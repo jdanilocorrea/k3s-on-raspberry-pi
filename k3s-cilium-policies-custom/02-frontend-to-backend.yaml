@@ -2,17 +2,17 @@
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: allow-mysql-from-frontend
-  namespace: database
+  name: allow-frontend-to-backend
+  namespace: app
 spec:
   endpointSelector:
     matchLabels:
-      app: mysql
+      app: backend
   ingress:
     - fromEndpoints:
         - matchLabels:
             app: frontend
       toPorts:
         - ports:
-            - port: "3306"
+            - port: "80"
               protocol: TCP

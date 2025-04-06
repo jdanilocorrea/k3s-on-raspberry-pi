@@ -11,3 +11,7 @@ add_dns_local_host.txt
 kubeconfig_k3s_labs.txt
 
 senha_admin_grafana.txt
+
+senha_admin_argocd.txt
+
+delete-traefik.sh

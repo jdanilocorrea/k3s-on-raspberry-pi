@@ -33,4 +33,30 @@ helm upgrade --install loki grafana/loki-stack \
   --set grafana.enabled=false \
   --set promtail.enabled=true
 
-echo "✅ Instalação ou atualização do Loki + Promtail concluída com sucesso!"
+echo "✅ Loki Stack instalado com sucesso!"
+
+# 📁 Provisionando datasource Loki no Grafana
+echo "📁 Criando datasource Loki no Grafana (sem isDefault)..."
+
+DATASOURCE_DIR="/etc/grafana/provisioning/datasources"
+sudo mkdir -p "$DATASOURCE_DIR"
+
+sudo tee "$DATASOURCE_DIR/loki.yaml" > /dev/null <<EOF
+apiVersion: 1
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki.monitoring.svc.cluster.local:3100
+    isDefault: false
+    jsonData:
+      maxLines: 1000
+EOF
+
+echo "✅ Datasource Loki provisionado (isDefault: false)"
+
+# 🔁 Reiniciar o Grafana para aplicar o datasource
+echo "🔄 Reiniciando Grafana para aplicar datasource..."
+sudo systemctl restart grafana-server || sudo docker restart grafana || true
+
+echo "🎉 Finalizado com sucesso!"
